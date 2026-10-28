@@ -410,6 +410,7 @@ Perangkat lunak ini memakai paket open source berikut:
 MIT License
 
 Copyright (c) 2024 Agung Gumilang
+Copyright (c) 2026 Muchamad Desta Fadilah ~ [mdestafadilah](https://github.com/mdestafadilah)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
