@@ -6,9 +6,14 @@
 </p>
 
 <p align="center">
+  <a href="https://packagist.org/packages/mdestafadilah/satusehat-sdk"><img alt="Packagist Version" src="https://img.shields.io/packagist/v/mdestafadilah/satusehat-sdk?label=packagist&logo=packagist"></a>
   <img alt="PHP" src="https://img.shields.io/badge/php-%3E%3D8.0-777bb4">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
   <img alt="Tests" src="https://img.shields.io/badge/tests-43%20passed-brightgreen">
+</p>
+
+<p align="center">
+  <code>composer require mdestafadilah/satusehat-sdk</code>
 </p>
 
 <p align="center">
