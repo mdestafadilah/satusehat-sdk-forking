@@ -31,7 +31,7 @@
 
 ## Tentang Proyek
 
-`agumil/satusehat-sdk` adalah pustaka PHP (tanpa framework) untuk berbicara dengan platform **SATUSEHAT** milik Kementerian Kesehatan RI. Pustaka ini membungkus lima kelompok API yang dipakai faskes sehari-hari:
+`mdestafadilah/satusehat-sdk` adalah pustaka PHP (tanpa framework) untuk berbicara dengan platform **SATUSEHAT** milik Kementerian Kesehatan RI. Paket ini adalah fork dari `agumil/satusehat-sdk`. Pustaka ini membungkus lima kelompok API yang dipakai faskes sehari-hari:
 
 | Modul | Client | Base path | Kegunaan |
 | --- | --- | --- | --- |
@@ -55,7 +55,7 @@ Repo ini adalah **fork** dari proyek asal. Isinya bukan sekadar salinan: seluruh
 | Repo fork ini | [`mdestafadilah/satusehat-sdk-forking`](https://github.com/mdestafadilah/satusehat-sdk-forking) |
 | Analisis keamanan kode ini | [`ANALISIS-KEAMANAN.md`](./ANALISIS-KEAMANAN.md) |
 
-PR #13 berstatus **terbuka (belum di-merge)** saat README ini ditulis: 89 berkas berubah, +5.551 / −281 baris, dikerjakan oleh `mdestafadilah`. Karena belum dirilis ke Packagist, versi yang berisi seluruh perbaikan di bawah **hanya bisa dipasang dari repo ini** — lihat [Instalasi](#instalasi).
+PR #13 berstatus **terbuka (belum di-merge)** saat README ini ditulis: 89 berkas berubah, +5.551 / −281 baris, dikerjakan oleh `mdestafadilah`. Versi yang berisi seluruh perbaikan di bawah dirilis di Packagist dengan nama **[`mdestafadilah/satusehat-sdk`](https://packagist.org/packages/mdestafadilah/satusehat-sdk)** — lihat [Instalasi](#instalasi).
 
 ## Apa yang Dibawa PR #13
 
@@ -103,11 +103,21 @@ Guzzle 6 tidak lagi didukung: sudah EOL dan punya advisory tanpa perbaikan. Guzz
 
 ## Instalasi
 
-Karena PR #13 belum di-merge, Packagist masih menyajikan versi upstream. Pasang dari repo fork ini:
+```bash
+composer require mdestafadilah/satusehat-sdk
+```
+
+Bila hanya butuh versi upstream apa adanya:
+
+```bash
+composer require agumil/satusehat-sdk
+```
+
+Untuk mengikuti branch `main` tanpa menunggu rilis (mis. ingin ikut perubahan yang belum di-tag):
 
 ```bash
 composer config repositories.satusehat-forking vcs https://github.com/mdestafadilah/satusehat-sdk-forking
-composer require agumil/satusehat-sdk:dev-main
+composer require mdestafadilah/satusehat-sdk:dev-main
 ```
 
 Atau langsung di `composer.json`:
@@ -118,15 +128,9 @@ Atau langsung di `composer.json`:
     { "type": "vcs", "url": "https://github.com/mdestafadilah/satusehat-sdk-forking" }
   ],
   "require": {
-    "agumil/satusehat-sdk": "dev-main"
+    "mdestafadilah/satusehat-sdk": "dev-main"
   }
 }
-```
-
-Bila hanya butuh versi upstream apa adanya:
-
-```bash
-composer require agumil/satusehat-sdk
 ```
 
 Simpan kredensial di `.env`:

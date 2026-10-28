@@ -1,8 +1,23 @@
 {
-  "name": "agumil/satusehat-sdk",
-  "description": "Unofficial API wrapper package to integrate with SATUSEHAT platform.",
+  "name": "mdestafadilah/satusehat-sdk",
+  "description": "Unofficial API wrapper package to integrate with SATUSEHAT platform (fork of agumil/satusehat-sdk with PR #13 updates).",
   "type": "library",
+  "keywords": [
+    "satusehat",
+    "kemkes",
+    "fhir",
+    "fhir-r4",
+    "kfa",
+    "kyc",
+    "healthcare",
+    "indonesia"
+  ],
+  "homepage": "https://github.com/mdestafadilah/satusehat-sdk-forking",
   "license": "MIT",
+  "support": {
+    "issues": "https://github.com/mdestafadilah/satusehat-sdk-forking/issues",
+    "source": "https://github.com/mdestafadilah/satusehat-sdk-forking"
+  },
   "autoload": {
     "psr-4": {
       "agumil\\SatuSehatSDK\\": "src/"
