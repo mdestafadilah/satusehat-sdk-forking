@@ -82,4 +82,23 @@ class IdentifierSystem
     {
         return 'http://sys-ids.kemkes.go.id/prescription-item/' . $organizationId;
     }
+
+    /**
+     * Nomor kantong darah. Berbeda dari identifier lain, sistem ini tidak
+     * memuat organization id: nomor kantong berlaku lintas fasyankes.
+     */
+    public static function bloodBagNumber(): string
+    {
+        return 'http://sys-ids.kemkes.go.id/biologicallyderivedproduct/blood-bag-number';
+    }
+
+    public static function supplyrequest(string $organizationId): string
+    {
+        return 'http://sys-ids.kemkes.go.id/supplyrequest/' . $organizationId;
+    }
+
+    public static function supplydelivery(string $organizationId): string
+    {
+        return 'http://sys-ids.kemkes.go.id/supplydelivery/' . $organizationId;
+    }
 }

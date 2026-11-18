@@ -9,7 +9,7 @@
   <a href="https://packagist.org/packages/mdestafadilah/satusehat-sdk"><img alt="Packagist Version" src="https://img.shields.io/packagist/v/mdestafadilah/satusehat-sdk?label=packagist&logo=packagist"></a>
   <img alt="PHP" src="https://img.shields.io/badge/php-%3E%3D8.0-777bb4">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20passed-brightgreen">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-50%20passed-brightgreen">
 </p>
 
 <p align="center">
@@ -27,6 +27,7 @@
   <a href="#konfigurasi">Konfigurasi</a> •
   <a href="#partial-update">Partial Update</a> •
   <a href="#paging">Paging</a> •
+  <a href="#use-case-unit-pelayanan-darah-upd">UPD</a> •
   <a href="#kyc">KYC</a> •
   <a href="#logging">Logging</a> •
   <a href="#token-caching">Token Caching</a> •
@@ -40,7 +41,7 @@
 
 | Modul | Client | Base path | Kegunaan |
 | --- | --- | --- | --- |
-| FHIR R4 | `SSClient` | `/fhir-r4/v1` | Resource klinis: `Patient`, `Encounter`, `Observation`, `Condition`, `Medication`, dan 24 resource lain (29 kelas resource di `src/FHIR`). |
+| FHIR R4 | `SSClient` | `/fhir-r4/v1` | Resource klinis: `Patient`, `Encounter`, `Observation`, `Condition`, `Medication`, `BiologicallyDerivedProduct`, dan 26 resource lain (32 kelas resource di `src/FHIR`). |
 | Consent | `SSClient` | `/consent/v1` | Persetujuan pasien atas pertukaran data. |
 | KFA | `SSClientKFA` | `/kfa`, `/kfa-v2`, `/kfa-v3` | Katalog produk & alkes, harga JKN, dan template. |
 | KYC | `SSClientKYC` | `/kyc/v1` | Verifikasi NIK untuk memperoleh IHS Number. |
@@ -278,6 +279,61 @@ BundleHelper::nextUrl($bundle);          // string|null
 BundleHelper::nextParams($bundle);       // array|null berisi query param
 ```
 
+## Use Case: Unit Pelayanan Darah (UPD)
+
+Alur UPD pada Postman "52. Use Case - UPD" sebagian besar sudah bisa dijalankan dengan resource yang lama (`Organization`, `Location`, `Patient`, `Encounter`, `Observation`, `Procedure`, `ServiceRequest`, `Specimen`, `DiagnosticReport`). Tiga resource yang belum ada kini tersedia:
+
+| Resource | Langkah use case | Method `SSClient` |
+| --- | --- | --- |
+| `BiologicallyDerivedProduct` | 07. Data darah dan komponen darah; 08. distribusi & pemusnahan | `getBiologicallyDerivedProduct()`, `getBiologicallyDerivedProductById()`, `createBiologicallyDerivedProduct()`, `updateBiologicallyDerivedProduct()` |
+| `SupplyRequest` | 08. permintaan distribusi produk darah | `getSupplyRequest()`, `getSupplyRequestById()`, `createSupplyRequest()`, `updateSupplyRequest()` |
+| `SupplyDelivery` | 08. pengiriman produk darah ke fasyankes penerima | `getSupplyDelivery()`, `getSupplyDeliveryById()`, `createSupplyDelivery()`, `updateSupplyDelivery()` |
+
+Nomor kantong darah dicari lewat identifier `IdentifierSystem::bloodBagNumber()`, yang berbeda dari identifier lain karena tidak memuat organization id:
+
+```php
+$params['identifier'] = IdentifierSystem::bloodBagNumber() . '|GCO-26-A0123-WB';
+$response = $ssclient->getBiologicallyDerivedProduct($params);
+```
+
+Membuat kantong darah beserta volume dan tanggal kedaluwarsa:
+
+```php
+use agumil\SatuSehatSDK\Builder\PayloadBuilderBiologicallyDerivedProduct;
+use agumil\SatuSehatSDK\DataType\CodeableConcept;
+use agumil\SatuSehatSDK\DataType\Coding;
+use agumil\SatuSehatSDK\DataType\Identifier;
+use agumil\SatuSehatSDK\DataType\Quantity;
+use agumil\SatuSehatSDK\DataType\Reference;
+use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductCategory;
+use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductStatus;
+use agumil\SatuSehatSDK\Terminology\KemKes\IdentifierSystem;
+
+$builder = new PayloadBuilderBiologicallyDerivedProduct();
+$builder->addIdentifier(new Identifier(
+    IdentifierSystem::bloodBagNumber(), 'official', 'GCO-26-A0123-WB',
+    null, null, new Reference('Organization/' . $organizationId)
+));
+$builder->setStatus(BiologicallyDerivedProductStatus::CODE_AVAILABLE);
+$builder->setProductCategory(BiologicallyDerivedProductCategory::CODE_FLUID);
+$builder->setProductCode(new CodeableConcept(null, new Coding('http://snomed.info/sct', '12289007', 'Whole blood product')));
+$builder->setCollectionSource(new Reference('Patient/' . $patientId));
+$builder->setCollectedDateTime('2025-06-04T08:55:00+00:00');
+$builder->addProcessing(null, '2025-06-04T09:15:00+00:00');
+$builder->setQuantity(1);
+$builder->setValueQuantity(new Quantity('http://unitsofmeasure.org', 'mL', 250, 'mL'));
+$builder->setExpirationDate('2026-10-10T23:59:00+07:00');
+
+$response = $ssclient->createBiologicallyDerivedProduct($builder->build());
+```
+
+Saat kantong keluar dari stok, statusnya menjadi `unavailable` dan alasannya dicatat lewat extension profil: `setStatusDetail()` untuk distribusi, `setDestruction()` untuk pemusnahan (tanggal + alasan sekaligus).
+
+Contoh lengkap ada di [`examples/FHIR/UPD/`](./examples/FHIR/UPD): `blood_component_post.php`, `blood_component_put.php`, `supply_request_post.php`, dan `supply_delivery_post.php`.
+
+> **Catatan**
+> Dua URL extension pada contoh Postman tidak konsisten: pembuatan kantong memakai `.../StructureDefinition/r4/BiologicallyDerivedProduct/expirationDate`, sedangkan contoh update memakai `.../r4/StructureDefinition/...`, dan `receivingOrganization` ditulis `https:https://...`. Builder memakai pola kanonis `https://fhir.kemkes.go.id/r4/StructureDefinition/...`. Bila server menolak, periksa versi panduan implementasi yang berlaku.
+
 ## KYC
 
 KYC (verifikasi NIK) punya base URL sendiri (`/kyc/v1`) dengan Bearer token yang sama, jadi ia dipakai lewat client terpisah: `SSClientKYC`.
@@ -381,7 +437,7 @@ composer test
 Suite berjalan di PHPUnit dan tidak memerlukan akses jaringan: handler Guzzle di-mock, dan transport KYC/FHIR diganti recorder. Hasil pada repo ini (PHP 8.4, PHPUnit 11.5):
 
 ```
-Tests: 43, Assertions: 78, Skipped: 2.
+Tests: 50, Assertions: 87, Skipped: 2.
 ```
 
 Dua test permission dilewati di Windows karena perilaku yang diuji (bit mode POSIX) tidak ada di sana; `PosixFileTokenStore` di `tests/Support` menutup jalur verifikasi tersebut di Windows.

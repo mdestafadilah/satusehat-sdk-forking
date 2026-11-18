@@ -6,6 +6,7 @@ use agumil\SatuSehatSDK\Consent\Consent;
 use agumil\SatuSehatSDK\FHIR\AllergyIntolerance;
 use agumil\SatuSehatSDK\FHIR\Appointment;
 use agumil\SatuSehatSDK\FHIR\AppointmentResponse;
+use agumil\SatuSehatSDK\FHIR\BiologicallyDerivedProduct;
 use agumil\SatuSehatSDK\FHIR\CarePlan;
 use agumil\SatuSehatSDK\FHIR\ClinicalImpression;
 use agumil\SatuSehatSDK\FHIR\Composition;
@@ -32,6 +33,8 @@ use agumil\SatuSehatSDK\FHIR\RelatedPerson;
 use agumil\SatuSehatSDK\FHIR\ServiceRequest;
 use agumil\SatuSehatSDK\FHIR\Slot;
 use agumil\SatuSehatSDK\FHIR\Specimen;
+use agumil\SatuSehatSDK\FHIR\SupplyDelivery;
+use agumil\SatuSehatSDK\FHIR\SupplyRequest;
 
 class SSClient
 {
@@ -103,6 +106,26 @@ class SSClient
     public function updateAppointmentResponse(string $id, $params)
     {
         return (new AppointmentResponse($this->oauth2, $this->config))->updateAppointmentResponse($id, $params);
+    }
+
+    public function getBiologicallyDerivedProduct(array $params = [])
+    {
+        return (new BiologicallyDerivedProduct($this->oauth2, $this->config))->getBiologicallyDerivedProduct($params);
+    }
+
+    public function getBiologicallyDerivedProductById(string $id)
+    {
+        return (new BiologicallyDerivedProduct($this->oauth2, $this->config))->getBiologicallyDerivedProductById($id);
+    }
+
+    public function createBiologicallyDerivedProduct($params)
+    {
+        return (new BiologicallyDerivedProduct($this->oauth2, $this->config))->createBiologicallyDerivedProduct($params);
+    }
+
+    public function updateBiologicallyDerivedProduct(string $id, $params)
+    {
+        return (new BiologicallyDerivedProduct($this->oauth2, $this->config))->updateBiologicallyDerivedProduct($id, $params);
     }
 
     public function getCarePlan(array $params = [])
@@ -623,5 +646,45 @@ class SSClient
     public function updateSpecimen(string $id, $params)
     {
         return (new Specimen($this->oauth2, $this->config))->updateSpecimen($id, $params);
+    }
+
+    public function getSupplyDelivery(array $params = [])
+    {
+        return (new SupplyDelivery($this->oauth2, $this->config))->getSupplyDelivery($params);
+    }
+
+    public function getSupplyDeliveryById(string $id)
+    {
+        return (new SupplyDelivery($this->oauth2, $this->config))->getSupplyDeliveryById($id);
+    }
+
+    public function createSupplyDelivery($params)
+    {
+        return (new SupplyDelivery($this->oauth2, $this->config))->createSupplyDelivery($params);
+    }
+
+    public function updateSupplyDelivery(string $id, $params)
+    {
+        return (new SupplyDelivery($this->oauth2, $this->config))->updateSupplyDelivery($id, $params);
+    }
+
+    public function getSupplyRequest(array $params = [])
+    {
+        return (new SupplyRequest($this->oauth2, $this->config))->getSupplyRequest($params);
+    }
+
+    public function getSupplyRequestById(string $id)
+    {
+        return (new SupplyRequest($this->oauth2, $this->config))->getSupplyRequestById($id);
+    }
+
+    public function createSupplyRequest($params)
+    {
+        return (new SupplyRequest($this->oauth2, $this->config))->createSupplyRequest($params);
+    }
+
+    public function updateSupplyRequest(string $id, $params)
+    {
+        return (new SupplyRequest($this->oauth2, $this->config))->updateSupplyRequest($id, $params);
     }
 }
