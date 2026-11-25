@@ -27,7 +27,7 @@ Yang berubah sejak v3 hanyalah satu commit kode: tiga resource UPD (Biologically
 | **N10** | `update*` fatal (`\Error` mentah) bila diberi builder — kini 29 resource, termasuk 3 resource UPD baru | ✅ **DIPERBAIKI** pasca-review (lihat §3) |
 | **N14** | `SupplyRequest.status` divalidasi terhadap value set yang salah (`request-status`, seharusnya `supplyrequest-status`) | ✅ **DIPERBAIKI** pasca-review (lihat §3) |
 | **N15** | Builder BDP memancarkan elemen yang tidak ada di R4 (`collection.quantity/procedure/bodySite/fastingStatus`, `division`, `property`) | MEDIUM |
-| **N16** | Tipe data backbone BDP salah vs R4 (`processing.additive`, `storage.temperature`, `storage.duration`, `manipulation`) | MEDIUM |
+| **N16** | Tipe data backbone BDP salah vs R4 (`processing.additive`, `storage.temperature`, `storage.duration`, `manipulation`) | ✅ **DIPERBAIKI** pasca-review (lihat §3) |
 | **N17** | `setSuppliedItem()` di SupplyDelivery menimpa `itemReference` yang sudah di-set — kehilangan data diam-diam, tergantung urutan | ✅ **DIPERBAIKI** pasca-review (lihat §3) |
 
 Temuan terbuka v3 (N11, N12, N6, N9, F3 dst.) **belum satu pun diperbaiki** — rincian di §4.
@@ -97,7 +97,9 @@ Docblock kelasnya (baris 17-18) yang mengklaim sesuai R4 juga keliru. Perbaikan:
 
 Tidak satu pun method ini dipakai test atau contoh, jadi kegagalannya (400 dari validator R4, atau elemen dibuang diam-diam) baru muncul di integrasi produksi. Perlu dikonfirmasi ke profil UPD resmi Kemkes sebelum dihapus — profil SATUSEHAT kadang menyimpang dari R4 murni, tetapi kalaupun begitu, penyimpangannya harus didokumentasikan, bukan dibiarkan implisit.
 
-### N16 — Tipe data backbone BDP salah vs R4 (MEDIUM)
+### N16 — Tipe data backbone BDP salah vs R4 (MEDIUM → ✅ DIPERBAIKI)
+
+> **Status: diperbaiki pasca-review v4.** `processing.additive` kini Reference (Substance); `setManipulation()` hanya menerima `description` + `timeDateTime`; `addStorage()` menerima `temperature` sebagai `int|float` polos, `scale` divalidasi terhadap terminology baru `HL7\BiologicallyDerivedProductStorageScale` (`product-storage-scale`: farenheit|celsius|kelvin), dan `duration` berupa Period. Tidak ada pemanggil lama yang memakai parameter yang berubah (test & contoh hanya memakai `addProcessing(null, <waktu>)`), jadi tidak ada jalur terdokumentasi yang pecah. Diuji: bentuk keluaran storage/processing/manipulation, dan `scale` di luar value set ditolak. Deskripsi asli dipertahankan di bawah sebagai arsip. Catatan: N16 berbeda dari N15 — N15 (setter untuk elemen yang tidak ada di R4) tetap terbuka menunggu konfirmasi profil UPD resmi.
 
 Masih di builder yang sama:
 
@@ -109,7 +111,7 @@ Skenario konkret: `addStorage(null, new Quantity(..., 4, 'C'))` menghasilkan `st
 
 ### N17 — Kehilangan data diam-diam pada `suppliedItem` SupplyDelivery (MEDIUM → ✅ DIPERBAIKI)
 
-> **Status: diperbaiki pasca-review v4.** Semua setter `suppliedItem` kini merge per-bagian (urutan pemanggilan tidak berpengaruh), choice `itemReference`/`itemCodeableConcept` dijaga mutual-exclusion ala `assertOccurrenceNotSet`, dan setter `setSuppliedItemCodeableConcept()` yang hilang ditambahkan. Properti `supplied_item` diberi nilai awal `[]` — menutup bug laten: `setSuppliedItemReference()` pada builder segar dulu fatal karena menulis per-kunci pada typed property belum terinisialisasi. Diuji order-independence dua arah + konflik choice. Deskripsi asli dipertahankan di bawah sebagai arsip.
+> **Status: diperbaiki pasca-review v4.** Semua setter `suppliedItem` kini merge per-bagian (urutan pemanggilan tidak berpengaruh), choice `itemReference`/`itemCodeableConcept` dijaga mutual-exclusion ala `assertOccurrenceNotSet`, dan setter `setSuppliedItemCodeableConcept()` yang hilang ditambahkan. Properti `supplied_item` diberi nilai awal `[]` agar eksplisit (catatan koreksi: tulis per-kunci pada typed array property yang belum terinisialisasi ternyata sah di PHP — diverifikasi empiris — jadi ini kerapian, bukan perbaikan bug laten seperti sempat ditulis). Diuji order-independence dua arah + konflik choice. Deskripsi asli dipertahankan di bawah sebagai arsip.
 
 `src/Builder/PayloadBuilderSupplyDelivery.php:101-121`: `setSuppliedItem()` mengganti `$this->supplied_item` seutuhnya (menghapus `itemReference` yang sudah di-set), sedangkan `setSuppliedItemReference()` me-merge. Jadi:
 
@@ -167,7 +169,8 @@ sementara urutan sebaliknya mempertahankan keduanya. `suppliedItem.item[x]` adal
 1. ~~**N10** — normalisasi builder di `update*`~~ ✅ selesai (`Base::payloadWithId()`, 29 pemanggil, +5 test).
 2. ~~**N14** — value set `SupplyRequestStatus` yang benar~~ ✅ selesai (terminology baru + 2 test).
 3. ~~**N17** — guard choice-field `suppliedItem` di SupplyDelivery~~ ✅ selesai (merge per-bagian + guard choice + setter baru, +2 test).
-4. **N15/N16/N22** — konfirmasi profil UPD resmi Kemkes, lalu selaraskan atau dokumentasikan penyimpangan.
+4. ~~**N16** — tipe data backbone BDP~~ ✅ selesai (additive→Reference, temperature→decimal, duration→Period, scale→value set baru, manipulation dirampingkan; +2 test).
+5. **N15/N22** — dilaporkan ke Kemkes untuk konfirmasi profil UPD resmi; selaraskan atau dokumentasikan penyimpangan setelah ada jawaban.
 
 **P2 — ketahanan & higiene (warisan v3)**
 

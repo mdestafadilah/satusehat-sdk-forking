@@ -319,6 +319,57 @@ class PayloadBuilderUpdTest extends TestCase
         $this->assertEquals($expected, $quantityFirst->build()['suppliedItem']);
     }
 
+    /**
+     * Temuan N16: tipe backbone `storage`/`processing`/`manipulation` kini
+     * mengikuti R4 — `temperature` decimal polos, `scale` terikat
+     * `product-storage-scale`, `duration` berupa Period, `additive` berupa
+     * Reference(Substance), dan `manipulation` hanya description + time[x].
+     */
+    public function testStorageAndProcessingFollowR4Datatypes(): void
+    {
+        $builder = new PayloadBuilderBiologicallyDerivedProduct();
+
+        $builder->addStorage(
+            'Simpan beku',
+            -30,
+            'celsius',
+            new \agumil\SatuSehatSDK\DataType\Period('2025-06-04T10:00:00+00:00', '2025-06-10T10:00:00+00:00')
+        );
+        $builder->addProcessing(null, null, 'Penambahan antikoagulan', new Reference('Substance/cpda-1'));
+        $builder->setManipulation('Pemisahan plasma', '2025-06-04T11:00:00+00:00');
+
+        $payload = $builder->build();
+
+        $this->assertSame([
+            'description' => 'Simpan beku',
+            'temperature' => -30,
+            'scale' => 'celsius',
+            'duration' => [
+                'start' => '2025-06-04T10:00:00+00:00',
+                'end' => '2025-06-10T10:00:00+00:00',
+            ],
+        ], $payload['storage'][0]);
+
+        $this->assertSame([
+            'description' => 'Penambahan antikoagulan',
+            'additive' => ['reference' => 'Substance/cpda-1'],
+        ], $payload['processing'][0]);
+
+        $this->assertSame([
+            'description' => 'Pemisahan plasma',
+            'timeDateTime' => '2025-06-04T11:00:00+00:00',
+        ], $payload['manipulation']);
+    }
+
+    public function testStorageScaleOutsideValueSetIsRejected(): void
+    {
+        $builder = new PayloadBuilderBiologicallyDerivedProduct();
+
+        $this->expectException(SSDataTypeException::class);
+
+        $builder->addStorage(null, 4, 'reaumur');
+    }
+
     public function testSuppliedItemChoiceIsMutuallyExclusive(): void
     {
         $builder = new PayloadBuilderSupplyDelivery();

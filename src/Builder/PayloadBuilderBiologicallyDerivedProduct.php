@@ -2,7 +2,6 @@
 namespace agumil\SatuSehatSDK\Builder;
 
 use agumil\SatuSehatSDK\DataType\CodeableConcept;
-use agumil\SatuSehatSDK\DataType\Duration;
 use agumil\SatuSehatSDK\DataType\Extension;
 use agumil\SatuSehatSDK\DataType\Identifier;
 use agumil\SatuSehatSDK\DataType\Period;
@@ -13,6 +12,7 @@ use agumil\SatuSehatSDK\Exception\SSDataTypeException;
 use agumil\SatuSehatSDK\Helper\ValidatorHelper;
 use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductCategory;
 use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductStatus;
+use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductStorageScale;
 
 /**
  * Payload builder untuk komponen darah (kantong darah) pada use case UPD.
@@ -190,7 +190,11 @@ class PayloadBuilderBiologicallyDerivedProduct
         return $this;
     }
 
-    public function addProcessing(?CodeableConcept $procedure = null, ?string $timeDateTime = null, ?string $description = null, ?CodeableConcept $additive = null)
+    /**
+     * `processing.additive` pada R4 adalah Reference(Substance), bukan
+     * CodeableConcept — zat aditif dirujuk sebagai resource, bukan kode.
+     */
+    public function addProcessing(?CodeableConcept $procedure = null, ?string $timeDateTime = null, ?string $description = null, ?Reference $additive = null)
     {
         $data = [];
 
@@ -215,20 +219,16 @@ class PayloadBuilderBiologicallyDerivedProduct
         return $this;
     }
 
-    public function setManipulation(?string $description = null, ?string $timeDateTime = null, ?CodeableConcept $procedure = null, ?CodeableConcept $additive = null)
+    /**
+     * `manipulation` pada R4 hanya punya `description` dan `time[x]` —
+     * tidak ada `procedure`/`additive` seperti pada `processing`.
+     */
+    public function setManipulation(?string $description = null, ?string $timeDateTime = null)
     {
         $data = [];
 
         if (isset($description)) {
             $data['description'] = $description;
-        }
-
-        if (isset($procedure)) {
-            $data['procedure'] = $procedure->toArray();
-        }
-
-        if (isset($additive)) {
-            $data['additive'] = $additive->toArray();
         }
 
         if (isset($timeDateTime)) {
@@ -249,7 +249,15 @@ class PayloadBuilderBiologicallyDerivedProduct
         return $this;
     }
 
-    public function addStorage(?string $description = null, ?Quantity $temperature = null, ?string $scale = null, ?Duration $duration = null)
+    /**
+     * Tipe mengikuti R4: `temperature` adalah decimal polos (satuannya
+     * dinyatakan lewat `scale`, bukan Quantity), `scale` terikat value set
+     * `product-storage-scale`, dan `duration` adalah Period.
+     *
+     * @param int|float|null $temperature suhu simpan, mis. -30 untuk plasma
+     * @param string|null    $scale       farenheit|celsius|kelvin
+     */
+    public function addStorage(?string $description = null, int | float | null $temperature = null, ?string $scale = null, ?Period $duration = null)
     {
         $data = [];
 
@@ -258,10 +266,12 @@ class PayloadBuilderBiologicallyDerivedProduct
         }
 
         if (isset($temperature)) {
-            $data['temperature'] = $temperature->toArray();
+            $data['temperature'] = $temperature;
         }
 
         if (isset($scale)) {
+            ValidatorHelper::in('scale', $scale, BiologicallyDerivedProductStorageScale::getCodes());
+
             $data['scale'] = $scale;
         }
 

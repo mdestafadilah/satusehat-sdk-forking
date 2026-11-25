@@ -38,8 +38,6 @@ class PayloadBuilderSupplyDelivery
 
     private array $type;
 
-    // Diberi nilai awal karena setter-setternya menulis per-kunci; tulis
-    // per-kunci pada typed property yang belum terinisialisasi adalah Error.
     private array $supplied_item = [];
 
     private array $occurrence;
