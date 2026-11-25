@@ -1,145 +1,174 @@
-# Analisis Keamanan & Kesesuaian API — `agumil/satusehat-sdk` (v3)
+# Analisis Keamanan & Kesesuaian API — `mdestafadilah/satusehat-sdk` (v4)
 
-**Tanggal:** 28 Oktober 2026
-**Commit yang dianalisis:** `abf9295` — *ci: tambah workflow GitHub Actions dan naikkan Guzzle ke 7.16*
-**Metode:** pembacaan kode + eksekusi nyata (Guzzle MockHandler, server lokal, reflection, probe jaringan). Setiap klaim di bawah punya output yang bisa direproduksi.
+**Tanggal:** 26 November 2026
+**Commit yang dianalisis:** `dac25af` — *feat(upd): tambah resource dan payload builder untuk use case UPD*
+**Metode:** pembacaan kode, eksekusi test suite lokal (PHP 8.4.5), `composer audit`, scan fungsi berbahaya/secret, plus review silang builder UPD terhadap spesifikasi FHIR R4. Setiap klaim di bawah merujuk file dan baris yang bisa diperiksa langsung.
 
-> **Riwayat:** v1 (commit `5353959`) sudah kedaluwarsa. v2 (`eafaddc`) menemukan 4 temuan P0 yang kemudian diperbaiki. v3 menilai kode **setelah** perbaikan itu, dan sengaja menyerang balik perbaikan tersebut.
+> **Riwayat:** v1 (`5353959`) dan v2 (`eafaddc`) sudah kedaluwarsa. v3 (`abf9295`) memverifikasi perbaikan 4 temuan P0 dan meninggalkan 5 temuan terbuka. Catatan: riwayat git repo ini telah di-squash sehingga commit `abf9295` tidak lagi ada di history — baseline v3 diverifikasi ulang dengan membaca kode saat ini, bukan lewat diff.
 
 ---
 
 ## 1. Ringkasan Eksekutif
 
-**Skor kesiapan produksi: 8,5/10** (v2: 7/10, v1: 4/10).
+**Skor kesiapan produksi: 8/10** (v3: 8,5/10 — turun karena kode UPD baru membawa cacat kesesuaian FHIR R4, meski fondasi keamanan tetap utuh).
 
-Empat temuan P0 dari v2 sudah tertutup dan **dibuktikan**, bukan sekadar diubah: endpoint token kini punya timeout, PHI disamarkan dengan pendekatan default-deny, `X-Debug-Mode` ditolak di production, dan file token diverifikasi permission serta ditandatangani HMAC. Ditambah: 43 test, CI 4 job hijau, dan 13 advisory dependensi hilang.
+Fondasi keamanan yang dibangun sejak v2 **masih utuh seluruhnya**: timeout endpoint token, redaksi PHI default-deny, penolakan `X-Debug-Mode` di produksi, dan FileTokenStore dengan HMAC + verifikasi permission. Higiene repo juga bersih: tidak ada `eval`/`exec`/`unserialize`/include dinamis, tidak ada kredensial ter-commit, `.env` di-ignore, CI memakai `permissions: contents: read` tanpa `pull_request_target`.
 
-Yang masih menghalangi produksi bukan lagi "bocor" atau "berhenti", melainkan **kelengkapan kontrak** dan **ketahanan saat jaringan bermasalah**:
+**Hasil eksekusi di commit ini:**
+
+- Test suite: **50 test, 87 assertion, hijau** (2 di-skip: test permission POSIX, memang tidak jalan di Windows).
+- `composer audit`: **0 advisory**.
+- Dependensi langsung: Guzzle 7.16.1, psr7 2.13.2 — major update tersedia (Guzzle 8, PHPUnit 13) tapi tidak mendesak.
+
+Yang berubah sejak v3 hanyalah satu commit kode: tiga resource UPD (BiologicallyDerivedProduct, SupplyRequest, SupplyDelivery) beserta builder, terminology, test, dan contohnya. Commit itu **mengulangi bug lama N10** pada tiga method `update*` barunya dan membawa **empat temuan MEDIUM baru** seputar kesesuaian FHIR R4:
 
 | # | Temuan | Tingkat |
 |---|---|---|
-| **N12** | Tidak ada anggaran waktu total untuk retry: `Retry-After` dihormati per percobaan, tanpa plafon keseluruhan | MEDIUM |
-| **N10** | 26 method `update*` fatal (`Error`, bukan exception SDK) bila diberi builder, padahal `create*` menerimanya | MEDIUM |
-| **N11** | `HttpRequest` tanpa `connect_timeout` — kegagalan koneksi memakan seluruh `timeout` (default 60 dtk) | LOW–MEDIUM |
-| **F3** | 22 resource resmi belum ada (Task, DocumentReference, Coverage/Claim, dll.) | MEDIUM (fitur) |
+| **N10** | `update*` fatal (`\Error` mentah) bila diberi builder — kini 29 resource, termasuk 3 resource UPD baru | MEDIUM |
+| **N14** | `SupplyRequest.status` divalidasi terhadap value set yang salah (`request-status`, seharusnya `supplyrequest-status`) | MEDIUM |
+| **N15** | Builder BDP memancarkan elemen yang tidak ada di R4 (`collection.quantity/procedure/bodySite/fastingStatus`, `division`, `property`) | MEDIUM |
+| **N16** | Tipe data backbone BDP salah vs R4 (`processing.additive`, `storage.temperature`, `storage.duration`, `manipulation`) | MEDIUM |
+| **N17** | `setSuppliedItem()` di SupplyDelivery menimpa `itemReference` yang sudah di-set — kehilangan data diam-diam, tergantung urutan | MEDIUM |
+
+Temuan terbuka v3 (N11, N12, N6, N9, F3 dst.) **belum satu pun diperbaiki** — rincian di §4.
 
 ---
 
-## 2. Verifikasi Perbaikan P0 (v2 → v3)
+## 2. Verifikasi Baseline v3 → v4
 
-Semua diuji ulang di kode saat ini, bukan dipercaya dari pesan commit.
+Semua diperiksa ulang pada kode saat ini.
 
-| Temuan v2 | Status | Bukti di commit `abf9295` |
+| Item v3 | Status di `dac25af` | Bukti |
 |---|---|---|
-| N1 — endpoint token tanpa timeout, exception Guzzle bocor | ✅ | Server lokal menahan 8 dtk: dengan `timeout=2` berhenti di **2,1 dtk** dan melempar `SSOauth2Exception`. 5xx/`ConnectException` kini juga `SSOauth2Exception`, `client_secret` disaring dari pesan. |
-| N2 — `PhiRedactor` membocorkan PHI | ✅ | `subject.display`, `text.div`, `note.text` → `[REDACTED]`; id di path `/Patient/100000030009` → `/Patient/[REDACTED]`. Test integrasi memastikan payload nyata tidak membawa nama/NIK ke logger. |
-| N3 — `X-Debug-Mode` KYC di production | ✅ | `SSEnvException` dilempar **sebelum** request dibuat (`calls === []`). Header tetap terkirim di staging/development. |
-| N4 — `FileTokenStore` permission & integritas | ✅ | Mode diverifikasi `fileperms()`; file palsu dan file bertanda tangan kunci lain ditolak; `umask(0077)` menutup jendela 0644. |
-| N5 — `BundlePager::isFinished()` | ✅ | Loop berhenti tepat di `max_pages`. |
-| N9 — tidak ada test/CI, advisory dependensi | ✅ sebagian | 43 test (78 assertion), CI 4 job **hijau di run pertama** (7/7 job sukses), Guzzle 7.16.1 + psr7 2.13.2 → `composer audit` bersih. Sisa N9 di §4. |
+| Timeout + `connect_timeout` endpoint token, `SSOauth2Exception`, scrub `client_secret` | ✅ utuh | `src/Auth/Oauth2.php:26-28, 275-313, 321-328` |
+| `PhiRedactor` default-deny (nilai, path id, query param) | ✅ utuh | `src/Helper/PhiRedactor.php` — `SAFE_KEYS` tetap hanya `resourcetype`+`status` |
+| `X-Debug-Mode` ditolak di production sebelum request dibuat | ✅ utuh | `src/KYC/Kyc.php:61-65` |
+| `FileTokenStore`: tulis atomik + `umask(0077)`, verifikasi `fileperms()`, HMAC `client_secret`, refresh di bawah `flock` | ✅ utuh | `src/Auth/FileTokenStore.php` |
+| Validasi `resourceId` sebelum interpolasi URL | ✅ utuh, **juga diterapkan di 3 resource UPD baru** | `src/Helper/ValidatorHelper.php:123-130`; `src/FHIR/{SupplyRequest,SupplyDelivery,BiologicallyDerivedProduct}.php` |
+| Retry idempoten-only, `Retry-After` dibatasi 60 dtk/percobaan, PATCH tidak di-retry | ✅ utuh | `src/Request/HttpRequest.php:21-44, 169-192` |
+| 43 test → kini **50 test / 87 assertion**, semuanya hijau | ✅ | `vendor/bin/phpunit` di PHP 8.4.5 |
+| `composer audit` bersih | ✅ | 0 advisory |
 
-**Verifikasi silang di CI** (run `40657721031`): PHP 8.0, 8.1, 8.2, 8.3, 8.4, *lowest dependencies*, dan *dependency audit* — semuanya `success`.
+**Higiene tambahan yang diperiksa di v4 (semuanya bersih):**
+
+- Tidak ada `eval`, `exec`, `shell_exec`, `system`, `unserialize`, `extract`, atau include/require dinamis di `src/` dan `examples/`.
+- Tidak ada secret ter-commit; `.env.example` hanya placeholder; `.gitignore` memuat `.env`.
+- Workflow CI: `permissions: contents: read`, concurrency group, tanpa secret, tanpa `pull_request_target`.
 
 ---
 
-## 3. Temuan Baru (hasil menyerang balik perbaikan v2)
+## 3. Temuan Baru (review commit UPD `dac25af`)
 
-### N10 — `update*` fatal bila diberi builder, `create*` tidak (MEDIUM)
+### N10 (meluas) — `update*` fatal bila diberi builder, kini 29 resource (MEDIUM)
 
-26 resource memakai pola `$params['id'] = $id;` pada method `update*`, sementara parameter `$params` tidak diberi tipe:
+Tiga method `update*` baru mengulangi pola lama `$params['id'] = $id;` pada parameter tanpa tipe:
 
+- `src/FHIR/BiologicallyDerivedProduct.php:45`
+- `src/FHIR/SupplyRequest.php:45`
+- `src/FHIR/SupplyDelivery.php:45`
+
+Skenario: `$ss->updateSupplyRequest($id, $builder)` (objek builder, bukan `$builder->build()`) fatal dengan
+`Error: Cannot use object of type PayloadBuilderSupplyRequest as array` — `\Error` mentah, bukan exception SDK, sehingga `catch (\Exception)` di aplikasi tidak menangkapnya. Payload berupa string JSON juga fatal (`Cannot access offset of type string on string`). Jalur `create*` menerima builder dengan baik (`HttpRequest::initializeOptions()` mendeteksi objek ber-`build()`), jadi inkonsistensinya persis seperti didokumentasikan di v3 §3 — hanya cakupannya bertambah.
+
+Catatan positif: `examples/FHIR/UPD/*.php` semuanya memanggil `->build()` lebih dulu, jadi jalur terdokumentasi aman. Perbaikan tetap satu helper normalisasi untuk 29 pemanggil (lihat v3 §3).
+
+### N14 — Value set `SupplyRequest.status` salah (MEDIUM)
+
+`src/Builder/PayloadBuilderSupplyRequest.php:61` memvalidasi `setStatus()` terhadap `Terminology\HL7\RequestStatus` (`request-status`: draft|active|on-hold|revoked|completed|entered-in-error|unknown). FHIR R4 mengikat `SupplyRequest.status` (required binding) ke **`supplyrequest-status`**: draft|active|**suspended**|**cancelled**|completed|entered-in-error|unknown.
+
+Akibat ganda:
+
+1. `setStatus('suspended')` / `setStatus('cancelled')` — status yang sah — dilempar `SSDataTypeException` oleh builder.
+2. `setStatus('on-hold')` / `setStatus('revoked')` — status yang tidak sah — lolos builder dan baru ditolak server sebagai 400.
+
+Docblock kelasnya (baris 17-18) yang mengklaim sesuai R4 juga keliru. Perbaikan: buat `Terminology\HL7\SupplyRequestStatus` dan pakai itu.
+
+### N15 — Builder BDP memancarkan elemen non-R4 (MEDIUM)
+
+`src/Builder/PayloadBuilderBiologicallyDerivedProduct.php`:
+
+- Baris 165-191: `collection.quantity`, `collection.procedure`, `collection.bodySite`, `collection.fastingStatus` — ini field milik **Specimen.collection**, bukan BiologicallyDerivedProduct.collection (R4 hanya punya `collector`, `source`, `collected[x]`).
+- Baris 243-250: `division` — hanya ada di R5.
+- Baris 281-298: `property` — hanya ada di R5.
+
+Tidak satu pun method ini dipakai test atau contoh, jadi kegagalannya (400 dari validator R4, atau elemen dibuang diam-diam) baru muncul di integrasi produksi. Perlu dikonfirmasi ke profil UPD resmi Kemkes sebelum dihapus — profil SATUSEHAT kadang menyimpang dari R4 murni, tetapi kalaupun begitu, penyimpangannya harus didokumentasikan, bukan dibiarkan implisit.
+
+### N16 — Tipe data backbone BDP salah vs R4 (MEDIUM)
+
+Masih di builder yang sama:
+
+- Baris 205-207: `processing.additive` di R4 adalah **Reference(Substance)**, builder menerima CodeableConcept (memancarkan `{coding:[...]}` padahal yang diminta `{reference:"..."}`).
+- Baris 226-232: `manipulation` di R4 hanya punya `description` + `time[x]`; builder ikut memancarkan `procedure`/`additive`.
+- Baris 260-270: `storage.temperature` di R4 adalah **decimal**, builder menerima Quantity; `storage.duration` adalah **Period**, builder menerima Duration; `storage.scale` string bebas padahal R4 mengikatnya ke `farenheit|celsius|kelvin`.
+
+Skenario konkret: `addStorage(null, new Quantity(..., 4, 'C'))` menghasilkan `storage[0].temperature` berupa objek → 400 dari validator FHIR.
+
+### N17 — Kehilangan data diam-diam pada `suppliedItem` SupplyDelivery (MEDIUM)
+
+`src/Builder/PayloadBuilderSupplyDelivery.php:101-121`: `setSuppliedItem()` mengganti `$this->supplied_item` seutuhnya (menghapus `itemReference` yang sudah di-set), sedangkan `setSuppliedItemReference()` me-merge. Jadi:
+
+```php
+$b->setSuppliedItemReference($ref);
+$b->setSuppliedItem($qty);      // itemReference hilang tanpa error
 ```
-signature updateOrganization: id:string  params:none
-$params = $builder;
-$params['id'] = 'x';
-→ Error: Cannot use object of type ...PayloadBuilderOrganization as array
-```
 
-Dua masalah sekaligus:
+sementara urutan sebaliknya mempertahankan keduanya. `suppliedItem.item[x]` adalah choice field, tetapi tidak ada guard mutual-exclusion di sini (builder lain punya `assert*NotSet`), dan `setSuppliedItemCodeableConcept` tidak ada sama sekali.
 
-1. **Inkonsisten.** `createOrganization($builder)` berjalan karena `HttpRequest::initializeOptions()` mendeteksi objek ber-`build()`. Pengguna yang memakai pola builder di semua tempat akan mendapat `Error` mendadak hanya saat update.
-2. **Jenis kegagalannya salah.** Yang dilempar `\Error` mentah, bukan `SSDataTypeException`/`SSEnvException`. `catch (\Exception)` di aplikasi tidak menangkapnya, sehingga muncul sebagai fatal error 500.
+### Temuan LOW
 
-Catatan: contoh di `examples/FHIR/Organization/put.php` memanggil `->build()` lebih dulu, jadi jalur yang didokumentasikan aman — yang rusak adalah jalur yang wajar diasumsikan pengguna.
+| # | Temuan | Lokasi |
+|---|---|---|
+| N18 | `addProcessing()`/`addStorage()` dengan semua argumen null meng-append `[]`, sehingga `build()` memancarkan `"processing":[[]]` — elemen kosong yang ditolak FHIR. (`setManipulation()` all-null aman karena di-drop `!empty` di :383.) | `PayloadBuilderBiologicallyDerivedProduct.php:193-216, 252-275` |
+| N19 | `build()` SupplyRequest tidak menegakkan elemen wajib R4 (`item[x]` 1..1, `quantity` 1..1); payload berisi status saja "berhasil" dibangun dan gagal di server. Konsisten dengan konvensi builder SDK, tetapi test di `PayloadBuilderUpdTest.php:255-263` justru merestui resource invalid itu. | `PayloadBuilderSupplyRequest.php:176-238` |
+| N20 | Cakupan test jalur gagal tipis: mutual-exclusion `item[x]`/`occurrence[x]` SupplyRequest & SupplyDelivery, priority invalid, penolakan `resourceId`, dan fatal N10 semuanya belum di-test. Bug N17 akan tertangkap oleh satu test dua-setter. | `tests/Builder/PayloadBuilderUpdTest.php` |
+| N21 | `buildAsJSON()` bisa TypeError bila `json_encode()` mengembalikan false (mis. byte non-UTF-8 di description). Konsisten dengan builder lama — perbaiki SDK-wide atau tidak sama sekali. | BDP:406, SupplyRequest:241, SupplyDelivery:232 |
+| N22 (verifikasi) | `EXT_VALUE_QUANTITY` (`.../StructureDefinition/valueQuantity`, tanpa `/r4/` dan tanpa segmen resource) sengaja berbeda bentuk dari empat URL extension saudaranya karena contoh Postman tidak konsisten (komentar :31-34). Bila URL ini yang salah, volume kantong darah diabaikan server secara diam-diam. Konfirmasi ke profil UPD resmi; **jangan dinormalkan buta** — golden test di `PayloadBuilderUpdTest.php:77` mengunci nilai sekarang. | `PayloadBuilderBiologicallyDerivedProduct.php:36` |
 
-**Perbaikan yang disarankan:** terima `array|object`, lalu normalisasi dengan
-`$payload = is_object($params) && method_exists($params, 'build') ? $params->build() : $params;`
-sebelum menambahkan `id`. Satu helper, 26 pemanggil.
-
-### N11 — `connect_timeout` belum ada di jalur FHIR (LOW–MEDIUM)
-
-`Oauth2` kini punya `timeout` **dan** `connect_timeout`, tetapi `HttpRequest` hanya mengirim `timeout`:
-
-```
-opsi yang dikirim HttpRequest: {"timeout":3}
-```
-
-Terukur ke alamat yang di-blackhole (`192.0.2.1`):
-
-```
-HTTP 0 | durasi 3.0 dtk | {"errno":28,"error":"Connection timed out after 3012 milliseconds"}
-```
-
-Jadi **tidak** menggantung tanpa batas — `timeout` cURL mencakup fase connect. Yang menjadi masalah adalah skalanya: dengan default 60 dtk, satu kegagalan koneksi menahan worker PHP-FPM selama 60 dtk, padahal connect gagal biasanya sudah pasti dalam 5 dtk. Selama gangguan jaringan, ini mengubah satu host yang tidak terjangkau menjadi worker pool yang habis.
-
-**Perbaikan:** tambahkan `connect_timeout` (default 5) ke `initializeOptions()` dan `Config\Connection`, sejajar dengan `Oauth2`.
-
-### N12 — Retry tanpa anggaran total (MEDIUM)
-
-`Retry-After` dihormati per percobaan, tetapi tidak ada plafon keseluruhan:
-
-```
-2x Retry-After: 2  →  durasi 4.0 dtk  (status akhir 200)
-```
-
-Dengan `retry_attempts = 3` dan `Retry-After: 60` (nilai yang sah untuk 429), satu panggilan dapat menahan worker hingga ~120 detik, dan itu terjadi per request. Saat SATUSEHAT membalas 429 massal, aplikasi justru menambah tekanan: setiap worker tidur 60 detik sambil memegang koneksi.
-
-**Perbaikan:** tambahkan `retry_total_budget_ms` (mis. 30.000) yang diperiksa sebelum `usleep()`; bila anggaran habis, kembalikan respons terakhir apa adanya alih-alih menunggu lagi.
-
-### Yang saya curigai tetapi ternyata aman — jangan "diperbaiki"
-
-Ini sama pentingnya dengan temuan, karena perubahan di sini akan merusak sesuatu yang sudah benar:
+### Yang tampak mencurigakan tetapi aman — jangan "diperbaiki"
 
 | Dugaan | Hasil verifikasi |
 |---|---|
-| Redirect 302 bisa membocorkan Bearer token ke host lain | **Aman.** Guzzle membuang `Authorization` pada redirect lintas origin — terukur: request ke `attacker.example` terkirim **tanpa** header Authorization. Tidak perlu mematikan `allow_redirects`. |
-| `updatePatient()` salah `Content-Type` (RFC 6902 meminta `application/json-patch+json`) | **Aman.** Dokumentasi Patient menyatakan `application/json` **WAJIB**, dan SDK mengirim tepat itu. Mengikuti RFC justru akan merusak. |
-| `PATCH` tidak ikut di-retry (N7 di v2) | **Bukan bug.** JSON Patch dengan `op: add` tidak idempoten; mengulangnya bisa menggandakan data. Pengecualian PATCH dari `retry_methods` sudah benar. |
-| `MemoryLogger` di test pecah pada `psr/log` 1.x | **Aman.** Parameter `$message` sengaja tanpa tipe; 43 test lulus dengan `psr/log 1.1.0` (job `lowest`). |
-| `Practitioner` tanpa `create`/`update` | **Bukan kelalaian.** API resmi memang GET-only. |
+| `!empty($this->identifier)` pada typed property belum terinisialisasi | **Aman.** `isset()`/`empty()` pada typed property uninitialized mengembalikan false/true tanpa throw; `build()` pada builder segar tidak error. |
+| `key($this->item)` / `key($this->occurrence)` di `build()` | **Aman.** Array selalu baru di-assign dengan satu kunci; pointer internal tidak pernah digeser. |
+| `assert*NotSet` membolehkan set ulang kunci choice yang SAMA (overwrite) | **Disengaja.** Semantik replace, konsisten di ketiga builder; konflik lintas-kunci tetap dilempar `SSDataTypeException`. |
+| Display `"Delivered"` untuk kode `completed` di `SupplyDeliveryStatus` | **Bukan typo.** Itu display resmi HL7. Seluruh daftar kode terminology baru cocok dengan R4. |
+| `IdentifierSystem` baru menggabungkan `organization_id` tanpa validasi | **Bukan injeksi.** Hasilnya masuk nilai JSON (`identifier.system`), tidak pernah masuk URL request. |
+| Builder mengakumulasi state antar `build()` | **Konvensi SDK.** `build()` read-only/idempoten; pemanggilan berulang menghasilkan output identik. |
+| String field (description, display) tidak disanitasi | **Aman.** Semuanya lewat `json_encode` — tidak ada vektor injeksi payload. |
 
 ---
 
-## 4. Yang Masih Terbuka
+## 4. Yang Masih Terbuka (warisan v3, diverifikasi ulang — belum ada yang diperbaiki)
 
-| # | Celah | Dampak |
+| # | Celah | Status v4 |
 |---|---|---|
-| **F3** | **22 resource resmi belum ada**: Account, BillingStatus, ChargeItem, ChargeItemDefinition, ChargeItemResponse, Claim, ClaimResponse, Coverage, CoverageEligibilityRequest/Response, DocumentReference, Endpoint, Goal, Invoice, MedicationAdministration, MedicationStatement, NutritionOrder, PaymentNotice, PaymentReconciliation, RiskAssessment, Substance, Task | Untuk use case rujukan pasien: `Task` (status rujukan), `DocumentReference` (lampiran), `Coverage`/`Claim` (jaminan) belum bisa dikirim |
-| **F7** | Tanpa `If-Match`/`meta.versionId` | Rawan *lost update* saat dua sistem menulis resource yang sama |
-| **F10** | Kombinasi parameter pencarian `Patient` tidak divalidasi | Salah pakai baru terdeteksi sebagai 400 dari server |
-| **F14** | `Terminology/` hanya konstanta lokal, tanpa `$validate-code`/`$lookup` | Validasi kode ke kamus resmi harus dibangun sendiri |
-| **N6** | `EnvHelper::__construct()` adalah kode mati yang menunjuk `.env` di `src/Helper` | Jebakan bila suatu saat dipanggil; sebaiknya dihapus |
-| **N9** | `"minimum-stability": "dev"` masih ada; belum ada PHPStan/Psalm | Sudah terbukti berbahaya: `composer update` sempat memilih `guzzle 7.7.x-dev` saat menaikkan versi |
-| **N13** | `HttpRequest` membuat `Client` baru tiap request | Tidak ada connection reuse → TLS handshake berulang; murni performa, bukan keamanan |
-
-**Cakupan saat ini:** 29 resource FHIR (semua dengan search/byId/create/update kecuali `Practitioner` yang GET-only), plus `Consent`, `KYC`, dan `KFA`. 119 method publik, **semuanya** terjangkau dari `SSClient`/`SSClientKYC` — tidak ada method yang "ada tapi tidak bisa dipanggil".
+| **N11** | `HttpRequest` tanpa `connect_timeout` — hanya `Oauth2` yang punya | Masih ada (`src/Request/HttpRequest.php:314-320` hanya mengirim `timeout`) |
+| **N12** | Retry tanpa anggaran waktu total; `Retry-After: 60` × 3 percobaan ≈ 120 dtk per request | Masih ada |
+| **N6** | `EnvHelper::__construct()` kode mati menunjuk `.env` di `src/Helper` | Masih ada (`src/Helper/EnvHelper.php:13-22`) |
+| **N9** | `"minimum-stability": "dev"` di composer.json; belum ada PHPStan/Psalm di CI | Masih ada (`composer.json:44`) |
+| **N13** | `HttpRequest` membuat `Client` baru tiap request — tanpa connection reuse | Masih ada (performa, bukan keamanan) |
+| **F3** | 22 resource resmi belum ada (Task, DocumentReference, Coverage/Claim, dll.) — minus 3 yang kini hadir lewat UPD | Berkurang jadi 19 |
+| **F7** | Tanpa `If-Match`/`meta.versionId` — rawan lost update | Masih ada |
+| **F10** | Kombinasi parameter pencarian `Patient` tidak divalidasi | Masih ada |
+| **F14** | `Terminology/` hanya konstanta lokal, tanpa `$validate-code`/`$lookup` | Masih ada |
 
 ---
 
 ## 5. Prioritas Berikutnya
 
-**P1 — sebelum dipakai untuk rujukan pasien**
+**P1 — sebelum alur UPD dipakai produksi**
 
-1. N10 — `update*` menerima builder (26 resource, satu helper).
-2. N12 — anggaran total retry.
-3. F3 sebagian — minimal `Task` dan `DocumentReference`.
+1. **N10** — normalisasi builder di `update*` (satu helper, 29 pemanggil; satu-satunya temuan yang berupa fatal error).
+2. **N14** — value set `SupplyRequestStatus` yang benar.
+3. **N17** — guard choice-field `suppliedItem` di SupplyDelivery.
+4. **N15/N16/N22** — konfirmasi profil UPD resmi Kemkes, lalu selaraskan atau dokumentasikan penyimpangan.
 
-**P2 — ketahanan & higiene**
+**P2 — ketahanan & higiene (warisan v3)**
 
-4. N11 — `connect_timeout` di `HttpRequest`.
-5. F7 — `If-Match` opsional.
-6. N9 — hapus `minimum-stability: dev`, tambahkan PHPStan level 5 ke CI.
-7. N6, N13.
+5. **N12** — anggaran total retry.
+6. **N11** — `connect_timeout` di `HttpRequest`.
+7. **N9** — hapus `minimum-stability: dev`, tambahkan PHPStan level 5 ke CI.
+8. **N18–N21**, **N6**, **F7**.
 
 ---
 
@@ -147,40 +176,28 @@ Ini sama pentingnya dengan temuan, karena perubahan di sini akan merusak sesuatu
 
 ```bash
 composer install
-composer test          # 43 test, 78 assertion, tanpa jaringan
-composer audit         # 0 advisory
+vendor/bin/phpunit    # 50 test, 87 assertion, 2 skipped (POSIX di Windows)
+composer audit        # 0 advisory
 ```
 
 ```
-### 1. Timeout token (server lokal menahan 8 dtk)
-timeout=2        2,1 dtk | SSOauth2Exception: Unable to reach token endpoint
-default 15s     14,0 dtk | token didapat
+### N10 di resource UPD baru
+$ss->updateSupplyRequest('id-1', $builder);
+→ Error: Cannot use object of type PayloadBuilderSupplyRequest as array
 
-### 2. Redaksi PHI
-subject.display : "[REDACTED]"
-text.div        : "[REDACTED]"
-note.text       : "[REDACTED]"
-/Patient/100000030009 -> /Patient/[REDACTED]
+### N14
+(new PayloadBuilderSupplyRequest)->setStatus('suspended');
+→ SSDataTypeException (padahal sah untuk SupplyRequest)
+(new PayloadBuilderSupplyRequest)->setStatus('revoked');
+→ lolos builder (padahal tidak sah) → 400 dari server
 
-### 3. KYC production
-SSEnvException: 'X-Debug-Mode' is only available in development or staging.
+### N17
+$b->setSuppliedItemReference($ref); $b->setSuppliedItem($qty);
+→ build()['suppliedItem'] tanpa itemReference, tanpa error
 
-### 4. FileTokenStore
-file tanpa mac / mac kunci lain  -> get() = null
-chmod tidak berefek (Windows)    -> SSEnvException "instead of 0600"
-
-### 5. Retry
-2x Retry-After: 2  -> 4,0 dtk (tanpa plafon total)
-
-### 6. Koneksi blackhole
-timeout=3 -> HTTP 0 dalam 3,0 dtk (bounded, bukan menggantung)
-
-### 7. Redirect lintas host
-request 1 -> api-satusehat... Authorization: Bearer t
-request 2 -> attacker.example  Authorization: (tidak ada)
-
-### 8. update* dengan builder
-Error: Cannot use object of type PayloadBuilderOrganization as array
+### N18
+$b->addProcessing(); $b->addStorage();
+→ build() memuat "processing":[[]] dan "storage":[[]]
 ```
 
-**Batas kejujuran analisis ini:** dua test permission POSIX di-skip di mesin ini (Windows), dan WSL diblokir kebijakan sandbox — jalur `chmod`/`fileperms` diuji lewat simulasi `PosixFileTokenStore`, bukan syscall asli. Di CI Linux keduanya berjalan sungguhan. Perbandingan endpoint tetap bersandar pada katalog resmi `satusehat.kemkes.go.id/platform/docs/id/api-catalogue/`; JSON koleksi Postman tidak dapat diunduh tanpa API key.
+**Batas kejujuran analisis ini:** test permission POSIX tetap di-skip di mesin Windows ini (di CI Linux berjalan sungguhan). Pemetaan N14–N16 bersandar pada definisi FHIR R4 upstream (hl7.org/fhir/R4); profil turunan SATUSEHAT untuk UPD belum bisa dibandingkan langsung karena koleksi Postman resminya tidak dapat diunduh tanpa API key — karena itu N15/N16/N22 diberi catatan "konfirmasi profil resmi" alih-alih divonis mutlak.
