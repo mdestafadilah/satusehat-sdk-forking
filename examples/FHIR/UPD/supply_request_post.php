@@ -7,7 +7,7 @@ use agumil\SatuSehatSDK\DataType\Identifier;
 use agumil\SatuSehatSDK\DataType\Quantity;
 use agumil\SatuSehatSDK\DataType\Reference;
 use agumil\SatuSehatSDK\SSClient;
-use agumil\SatuSehatSDK\Terminology\HL7\RequestStatus;
+use agumil\SatuSehatSDK\Terminology\HL7\SupplyRequestStatus;
 use agumil\SatuSehatSDK\Terminology\KemKes\IdentifierSystem;
 
 // init client
@@ -20,7 +20,7 @@ $builder->addIdentifier(new Identifier(
     'SR0000001'
 ));
 
-$builder->setStatus(RequestStatus::CODE_ACTIVE);
+$builder->setStatus(SupplyRequestStatus::CODE_ACTIVE);
 
 // blood bag (SNOMED CT 116205004)
 $builder->setItemCodeableConcept(new CodeableConcept(null, new Coding('http://snomed.info/sct', '116205004', 'Blood bag')));

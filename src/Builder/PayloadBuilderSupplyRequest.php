@@ -9,13 +9,14 @@ use agumil\SatuSehatSDK\DataType\Reference;
 use agumil\SatuSehatSDK\Exception\SSDataTypeException;
 use agumil\SatuSehatSDK\Helper\ValidatorHelper;
 use agumil\SatuSehatSDK\Terminology\HL7\RequestPriority;
-use agumil\SatuSehatSDK\Terminology\HL7\RequestStatus;
+use agumil\SatuSehatSDK\Terminology\HL7\SupplyRequestStatus;
 
 /**
  * Permintaan distribusi produk darah dari fasyankes peminta ke UPD.
  *
- * Status memakai `request-status` (draft/active/...) seperti pada FHIR R4,
- * bukan status khusus SupplyRequest, sehingga divalidasi dengan RequestStatus.
+ * Status divalidasi dengan `supplyrequest-status` — value set khusus
+ * SupplyRequest pada FHIR R4, yang mengenal `suspended`/`cancelled` tetapi
+ * tidak mengenal `on-hold`/`revoked` milik `request-status`.
  */
 class PayloadBuilderSupplyRequest
 {
@@ -58,7 +59,7 @@ class PayloadBuilderSupplyRequest
 
     public function setStatus(string $status)
     {
-        ValidatorHelper::in('status', $status, RequestStatus::getCodes());
+        ValidatorHelper::in('status', $status, SupplyRequestStatus::getCodes());
 
         $this->status = $status;
 

@@ -12,8 +12,8 @@ use agumil\SatuSehatSDK\DataType\Reference;
 use agumil\SatuSehatSDK\Exception\SSDataTypeException;
 use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductCategory;
 use agumil\SatuSehatSDK\Terminology\HL7\BiologicallyDerivedProductStatus;
-use agumil\SatuSehatSDK\Terminology\HL7\RequestStatus;
 use agumil\SatuSehatSDK\Terminology\HL7\SupplyDeliveryStatus;
+use agumil\SatuSehatSDK\Terminology\HL7\SupplyRequestStatus;
 use agumil\SatuSehatSDK\Terminology\KemKes\IdentifierSystem;
 use PHPUnit\Framework\TestCase;
 
@@ -141,7 +141,7 @@ class PayloadBuilderUpdTest extends TestCase
             null,
             'SR0000001'
         ));
-        $builder->setStatus(RequestStatus::CODE_ACTIVE);
+        $builder->setStatus(SupplyRequestStatus::CODE_ACTIVE);
         $builder->setItemCodeableConcept(new CodeableConcept(null, new Coding('http://snomed.info/sct', '116205004', 'Blood bag')));
         $builder->setQuantity(new Quantity('http://unitsofmeasure.org', 'mL', 250, 'mL'));
         $builder->setAuthoredOn('2025-08-27T14:00:00+00:00');
@@ -255,10 +255,77 @@ class PayloadBuilderUpdTest extends TestCase
     public function testBuildAsJsonProducesValidJson(): void
     {
         $builder = new PayloadBuilderSupplyRequest();
-        $builder->setStatus(RequestStatus::CODE_ACTIVE);
+        $builder->setStatus(SupplyRequestStatus::CODE_ACTIVE);
 
         $decoded = json_decode($builder->buildAsJSON(), true);
 
         $this->assertSame('SupplyRequest', $decoded['resourceType']);
+    }
+
+    /**
+     * Temuan N14: status divalidasi dengan `supplyrequest-status`, bukan
+     * `request-status`. `suspended`/`cancelled` sah untuk SupplyRequest,
+     * sedangkan `on-hold`/`revoked` tidak.
+     */
+    public function testSupplyRequestAcceptsSupplyRequestStatusCodes(): void
+    {
+        $builder = new PayloadBuilderSupplyRequest();
+
+        $builder->setStatus(SupplyRequestStatus::CODE_SUSPENDED);
+        $this->assertSame('suspended', $builder->build()['status']);
+
+        $builder->setStatus(SupplyRequestStatus::CODE_CANCELLED);
+        $this->assertSame('cancelled', $builder->build()['status']);
+    }
+
+    public function testSupplyRequestRejectsRequestStatusOnlyCodes(): void
+    {
+        $builder = new PayloadBuilderSupplyRequest();
+
+        $this->expectException(SSDataTypeException::class);
+
+        $builder->setStatus('on-hold');
+    }
+
+    /**
+     * Temuan N17: `setSuppliedItem()` dulu mengganti `suppliedItem` seutuhnya,
+     * menghapus `itemReference` yang sudah di-set tanpa error. Kini setiap
+     * setter hanya menyentuh bagiannya, jadi urutan tidak berpengaruh.
+     */
+    public function testSuppliedItemSettersAreOrderIndependent(): void
+    {
+        $quantity = new Quantity('http://unitsofmeasure.org', 'mL', 250, 'mL');
+        $item = new Reference('Device/item-1');
+
+        $referenceFirst = new PayloadBuilderSupplyDelivery();
+        $referenceFirst->setSuppliedItemReference($item);
+        $referenceFirst->setSuppliedItem($quantity);
+
+        $quantityFirst = new PayloadBuilderSupplyDelivery();
+        $quantityFirst->setSuppliedItem($quantity);
+        $quantityFirst->setSuppliedItemReference($item);
+
+        $expected = [
+            'itemReference' => ['reference' => 'Device/item-1'],
+            'quantity' => [
+                'system' => 'http://unitsofmeasure.org',
+                'code' => 'mL',
+                'value' => 250,
+                'unit' => 'mL',
+            ],
+        ];
+
+        $this->assertEquals($expected, $referenceFirst->build()['suppliedItem']);
+        $this->assertEquals($expected, $quantityFirst->build()['suppliedItem']);
+    }
+
+    public function testSuppliedItemChoiceIsMutuallyExclusive(): void
+    {
+        $builder = new PayloadBuilderSupplyDelivery();
+        $builder->setSuppliedItemReference(new Reference('Device/item-1'));
+
+        $this->expectException(SSDataTypeException::class);
+
+        $builder->setSuppliedItemCodeableConcept(new CodeableConcept(null, new Coding('http://snomed.info/sct', '116205004', 'Blood bag')));
     }
 }

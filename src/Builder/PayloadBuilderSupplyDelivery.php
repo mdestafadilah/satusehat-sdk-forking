@@ -38,7 +38,9 @@ class PayloadBuilderSupplyDelivery
 
     private array $type;
 
-    private array $supplied_item;
+    // Diberi nilai awal karena setter-setternya menulis per-kunci; tulis
+    // per-kunci pada typed property yang belum terinisialisasi adalah Error.
+    private array $supplied_item = [];
 
     private array $occurrence;
 
@@ -95,27 +97,41 @@ class PayloadBuilderSupplyDelivery
     }
 
     /**
+     * Semua setter `suppliedItem` menambah/mengganti bagiannya masing-masing
+     * tanpa menghapus bagian lain, sehingga urutan pemanggilan tidak
+     * berpengaruh. Versi lama mengganti `suppliedItem` seutuhnya di sini,
+     * yang menghapus `itemReference` yang sudah di-set tanpa error.
+     *
      * @param Quantity      $quantity      volume yang dikirim (mis. 250 mL)
      * @param Reference|null $product      referensi ke BiologicallyDerivedProduct (kantong darah)
      */
     public function setSuppliedItem(Quantity $quantity, ?Reference $product = null)
     {
-        $data = [];
-
         if (isset($product)) {
-            $data['extension'][] = (new Extension(self::EXT_SUPPLIED_BIOLOGICALLY_DERIVED_PRODUCT, $product->toArray(), 'Reference'))->toArray();
+            $this->supplied_item['extension'] = [
+                (new Extension(self::EXT_SUPPLIED_BIOLOGICALLY_DERIVED_PRODUCT, $product->toArray(), 'Reference'))->toArray(),
+            ];
         }
 
-        $data['quantity'] = $quantity->toArray();
-
-        $this->supplied_item = $data;
+        $this->supplied_item['quantity'] = $quantity->toArray();
 
         return $this;
     }
 
     public function setSuppliedItemReference(Reference $item)
     {
+        $this->assertSuppliedItemChoiceNotSet('itemReference');
+
         $this->supplied_item['itemReference'] = $item->toArray();
+
+        return $this;
+    }
+
+    public function setSuppliedItemCodeableConcept(CodeableConcept $item)
+    {
+        $this->assertSuppliedItemChoiceNotSet('itemCodeableConcept');
+
+        $this->supplied_item['itemCodeableConcept'] = $item->toArray();
 
         return $this;
     }
@@ -239,6 +255,21 @@ class PayloadBuilderSupplyDelivery
         if (!empty($this->occurrence) && !array_key_exists($incoming, $this->occurrence)) {
             $current = key($this->occurrence);
             throw new SSDataTypeException("occurrenceDateTime and occurrencePeriod are mutually exclusive; {$current} is already set.");
+        }
+    }
+
+    /**
+     * `suppliedItem.item[x]` adalah choice field: hanya satu dari
+     * `itemReference`/`itemCodeableConcept` yang boleh ada. Set ulang kunci
+     * yang sama tetap diizinkan (semantik replace, konsisten dengan choice
+     * field lain di builder ini).
+     */
+    private function assertSuppliedItemChoiceNotSet(string $incoming)
+    {
+        foreach (['itemReference', 'itemCodeableConcept'] as $existing) {
+            if ($existing !== $incoming && isset($this->supplied_item[$existing])) {
+                throw new SSDataTypeException("suppliedItem.itemReference and suppliedItem.itemCodeableConcept are mutually exclusive; {$existing} is already set.");
+            }
         }
     }
 }
