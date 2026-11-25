@@ -42,7 +42,7 @@ class DiagnosticReport extends Base implements DiagnosticReportInterface
     public function updateDiagnosticReport(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "DiagnosticReport/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

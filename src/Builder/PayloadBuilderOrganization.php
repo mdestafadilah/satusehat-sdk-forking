@@ -109,7 +109,7 @@ class PayloadBuilderOrganization
         return $this;
     }
 
-    public function addContact(CodeableConcept | string $purpose = null, ?HumanName $name = null, ?BundleContactPoint $telecom = null, ?Address $address = null)
+    public function addContact(CodeableConcept | string | null $purpose = null, ?HumanName $name = null, ?BundleContactPoint $telecom = null, ?Address $address = null)
     {
         if (isset($purpose)) {
             if (!($purpose instanceof CodeableConcept)) {

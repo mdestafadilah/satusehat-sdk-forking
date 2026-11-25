@@ -42,7 +42,7 @@ class EpisodeOfCare extends Base implements EpisodeOfCareInterface
     public function updateEpisodeOfCare(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "EpisodeOfCare/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

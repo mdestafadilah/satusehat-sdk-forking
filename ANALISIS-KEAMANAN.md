@@ -24,7 +24,7 @@ Yang berubah sejak v3 hanyalah satu commit kode: tiga resource UPD (Biologically
 
 | # | Temuan | Tingkat |
 |---|---|---|
-| **N10** | `update*` fatal (`\Error` mentah) bila diberi builder — kini 29 resource, termasuk 3 resource UPD baru | MEDIUM |
+| **N10** | `update*` fatal (`\Error` mentah) bila diberi builder — kini 29 resource, termasuk 3 resource UPD baru | ✅ **DIPERBAIKI** pasca-review (lihat §3) |
 | **N14** | `SupplyRequest.status` divalidasi terhadap value set yang salah (`request-status`, seharusnya `supplyrequest-status`) | MEDIUM |
 | **N15** | Builder BDP memancarkan elemen yang tidak ada di R4 (`collection.quantity/procedure/bodySite/fastingStatus`, `division`, `property`) | MEDIUM |
 | **N16** | Tipe data backbone BDP salah vs R4 (`processing.additive`, `storage.temperature`, `storage.duration`, `manipulation`) | MEDIUM |
@@ -59,7 +59,9 @@ Semua diperiksa ulang pada kode saat ini.
 
 ## 3. Temuan Baru (review commit UPD `dac25af`)
 
-### N10 (meluas) — `update*` fatal bila diberi builder, kini 29 resource (MEDIUM)
+### N10 (meluas) — `update*` fatal bila diberi builder, kini 29 resource (MEDIUM → ✅ DIPERBAIKI)
+
+> **Status: diperbaiki langsung setelah review v4.** Normalisasi kini terpusat di `FHIR\Base::payloadWithId()`: objek builder di-`build()` lebih dulu, payload non-array dilempar sebagai `SSDataTypeException` (bukan `\Error`), dan `id` hasil validasi path selalu menimpa `id` bawaan payload. Ke-29 method `update*` memanggil helper ini. Diuji di `tests/FHIR/BasePayloadWithIdTest.php` (5 test: array, builder, override id, string ditolak, objek tanpa `build()` ditolak). Suite penuh: 55 test / 94 assertion hijau. Deskripsi asli temuan dipertahankan di bawah sebagai arsip.
 
 Tiga method `update*` baru mengulangi pola lama `$params['id'] = $id;` pada parameter tanpa tipe:
 
@@ -158,7 +160,7 @@ sementara urutan sebaliknya mempertahankan keduanya. `suppliedItem.item[x]` adal
 
 **P1 — sebelum alur UPD dipakai produksi**
 
-1. **N10** — normalisasi builder di `update*` (satu helper, 29 pemanggil; satu-satunya temuan yang berupa fatal error).
+1. ~~**N10** — normalisasi builder di `update*`~~ ✅ selesai (`Base::payloadWithId()`, 29 pemanggil, +5 test).
 2. **N14** — value set `SupplyRequestStatus` yang benar.
 3. **N17** — guard choice-field `suppliedItem` di SupplyDelivery.
 4. **N15/N16/N22** — konfirmasi profil UPD resmi Kemkes, lalu selaraskan atau dokumentasikan penyimpangan.

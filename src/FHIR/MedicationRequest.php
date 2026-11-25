@@ -42,7 +42,7 @@ class MedicationRequest extends Base implements MedicationRequestInterface
     public function updateMedicationRequest(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "MedicationRequest/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

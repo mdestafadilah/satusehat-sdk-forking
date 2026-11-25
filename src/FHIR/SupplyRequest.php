@@ -42,7 +42,7 @@ class SupplyRequest extends Base implements SupplyRequestInterface
     public function updateSupplyRequest(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "SupplyRequest/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

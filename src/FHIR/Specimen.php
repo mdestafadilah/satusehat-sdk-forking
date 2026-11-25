@@ -42,7 +42,7 @@ class Specimen extends Base implements SpecimenInterface
     public function updateSpecimen(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "Specimen/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

@@ -42,7 +42,7 @@ class Organization extends Base implements OrganizationInterface
     public function updateOrganization(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "Organization/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

@@ -42,7 +42,7 @@ class Condition extends Base implements ConditionInterface
     public function updateCondition(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "Condition/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

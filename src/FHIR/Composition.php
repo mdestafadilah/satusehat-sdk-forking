@@ -42,7 +42,7 @@ class Composition extends Base implements CompositionInterface
     public function updateComposition(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "Composition/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

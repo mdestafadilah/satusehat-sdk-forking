@@ -42,7 +42,7 @@ class ClinicalImpression extends Base implements ClinicalImpressionInterface
     public function updateClinicalImpression(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "ClinicalImpression/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);

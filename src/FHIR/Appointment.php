@@ -42,7 +42,7 @@ class Appointment extends Base implements AppointmentInterface
     public function updateAppointment(string $id, $params)
     {
         $id = ValidatorHelper::resourceId('id', $id);
-        $params['id'] = $id;
+        $params = $this->payloadWithId($params, $id);
 
         $url = $this->base_url . "Appointment/{$id}";
         $httpRequest = new HttpRequest($this->oauth2, $this->config);
